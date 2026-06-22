@@ -30,6 +30,14 @@ struct PDFKitRepresentedView: UIViewRepresentable {
         if let document = PDFDocument(url: url) {
             pdfView.document = document
             
+            // Capture total pages if not yet set
+            if book.totalPages == nil || book.totalPages != document.pageCount {
+                Task { @MainActor in
+                    book.totalPages = document.pageCount
+                    try? book.modelContext?.save()
+                }
+            }
+            
             // Resume from last page
             if let lastPageIndex = book.lastPage, lastPageIndex < document.pageCount {
                 if let page = document.page(at: lastPageIndex) {
@@ -101,6 +109,13 @@ struct PDFKitRepresentedView: NSViewRepresentable {
         
         if let document = PDFDocument(url: url) {
             pdfView.document = document
+            
+            if book.totalPages == nil || book.totalPages != document.pageCount {
+                Task { @MainActor in
+                    book.totalPages = document.pageCount
+                    try? book.modelContext?.save()
+                }
+            }
             
             if let lastPageIndex = book.lastPage, lastPageIndex < document.pageCount {
                 if let page = document.page(at: lastPageIndex) {

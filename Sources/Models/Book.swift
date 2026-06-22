@@ -11,8 +11,21 @@ final class Book {
     var lastOpenedAt: Date?
     var lastPage: Int?
     var isFavorite: Bool
+    var totalPages: Int?
     
-    init(id: UUID = UUID(), title: String, author: String, filename: String, dateAdded: Date = .now, lastOpenedAt: Date? = nil, lastPage: Int? = nil, isFavorite: Bool = false) {
+    var readingProgress: Double {
+        guard let total = totalPages, total > 0 else { return 0.0 }
+        guard let current = lastPage else { return 0.0 }
+        // +1 because pages are 0-indexed, so page 0 of 1 is 100%
+        return Double(current + 1) / Double(total)
+    }
+    
+    var isCompleted: Bool {
+        // Soft completion threshold (e.g. 95%) to avoid strict finishing requirements
+        return readingProgress >= 0.95
+    }
+    
+    init(id: UUID = UUID(), title: String, author: String, filename: String, dateAdded: Date = .now, lastOpenedAt: Date? = nil, lastPage: Int? = nil, isFavorite: Bool = false, totalPages: Int? = nil) {
         self.id = id
         self.title = title
         self.author = author

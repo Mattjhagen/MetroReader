@@ -201,13 +201,16 @@ struct LibraryView: View {
     }
     
     private func calculateOpacity(for book: Book) -> Double {
-        guard let url = LibraryStore.getURL(for: book) else { return 0.5 } // Missing file
-        guard let lastOpened = book.lastOpenedAt else { return 1.0 }
+        guard LibraryStore.getURL(for: book) != nil else { return 0.5 } // Missing file
         
-        let daysSinceOpen = Calendar.current.dateComponents([.day], from: lastOpened, to: .now).day ?? 0
-        if daysSinceOpen > 30 { return 0.6 }
-        else if daysSinceOpen > 7 { return 0.8 }
-        return 1.0
+        // Semantic decay
+        if book.isCompleted {
+            return 0.5 // Muted
+        } else if book.readingProgress > 0 {
+            return 0.85 // Partially read, slightly dimmed
+        } else {
+            return 1.0 // Unread, full opacity
+        }
     }
     
     private var emptyStateView: some View {
@@ -253,18 +256,37 @@ struct BookTileContent: View {
     let book: Book
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Spacer()
-            Text(book.title)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .lineLimit(2)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Spacer()
+                Text(book.title)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                
+                Text(book.author)
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+            }
+            .padding(.bottom, 6)
             
-            Text(book.author)
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.8))
-                .lineLimit(1)
+            // Momentum signal (invisible progress bar)
+            if book.readingProgress > 0 && !book.isCompleted {
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(height: 2)
+                        .overlay(
+                            Rectangle()
+                                .fill(Color.white)
+                                .frame(width: geo.size.width * CGFloat(book.readingProgress), height: 2),
+                            alignment: .leading
+                        )
+                }
+                .frame(height: 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
