@@ -1,16 +1,17 @@
 import SwiftUI
 
-public struct ReaderCapabilities {
-    public let canChangeTypography: Bool
-    public let canChangeTheme: Bool
+struct ReaderCapabilities {
+    let canChangeTypography: Bool
+    let canChangeTheme: Bool
     
-    public init(canChangeTypography: Bool, canChangeTheme: Bool) {
+    init(canChangeTypography: Bool, canChangeTheme: Bool) {
         self.canChangeTypography = canChangeTypography
         self.canChangeTheme = canChangeTheme
     }
 }
 
-public protocol ContentProvider {
+@MainActor
+protocol ContentProvider {
     var book: Book { get }
     var fileURL: URL { get }
     

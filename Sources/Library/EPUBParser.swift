@@ -1,19 +1,19 @@
 import Foundation
 import ZIPFoundation
 
-public enum EPUBParserError: Error {
+enum EPUBParserError: Error {
     case invalidArchive
     case missingContainer
     case missingOPF
     case parsingFailed
 }
 
-public struct EPUBParser {
-    public let unzippedURL: URL
-    public let opfURL: URL
-    public let spineItems: [URL]
+struct EPUBParser: Sendable {
+    let unzippedURL: URL
+    let opfURL: URL
+    let spineItems: [URL]
     
-    public init(fileURL: URL) async throws {
+    init(fileURL: URL) async throws {
         // Create a unique temporary directory
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -90,7 +90,7 @@ public struct EPUBParser {
         self.spineItems = spine
     }
     
-    public func cleanup() {
+    func cleanup() {
         try? FileManager.default.removeItem(at: unzippedURL)
     }
 }

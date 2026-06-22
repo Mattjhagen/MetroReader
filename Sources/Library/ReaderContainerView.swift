@@ -1,10 +1,10 @@
 import SwiftUI
 import SwiftUI
 
-public enum ReaderTheme: String, CaseIterable { case system, light, dark, sepia }
-public enum ReaderFontSize: String, CaseIterable { case small, medium, large }
-public enum ReaderMargin: String, CaseIterable { case compact, comfortable, spacious }
-public struct ReaderContainerView: View {
+enum ReaderTheme: String, CaseIterable { case system, light, dark, sepia }
+enum ReaderFontSize: String, CaseIterable { case small, medium, large }
+enum ReaderMargin: String, CaseIterable { case compact, comfortable, spacious }
+struct ReaderContainerView: View {
     let book: Book
     @State private var provider: ContentProvider?
     @State private var error: Error?
@@ -19,23 +19,37 @@ public struct ReaderContainerView: View {
     @AppStorage("readerFontSize") var fontSize: ReaderFontSize = .medium
     @AppStorage("readerMargin") var margin: ReaderMargin = .comfortable
     
-    public init(book: Book) {
+    init(book: Book) {
         self.book = book
     }
     
-    public var body: some View {
+    var body: some View {
         Group {
             if let error = error {
-                VStack {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 64))
                         .foregroundColor(.red)
-                    Text("Failed to load book")
-                        .font(.headline)
-                    Text(error.localizedDescription)
+                    Text(failureTitle(for: book.failureType))
+                        .font(.title2.bold())
+                    Text(failureMessage(for: book.failureType))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                    
+                    Button(action: { dismiss() }) {
+                        Text("Return to Library")
+                            .font(.headline)
+                            .padding()
+                            .frame(maxWidth: 240)
+                            .background(Color.secondary.opacity(0.2))
+                            .foregroundColor(.primary)
+                            .clipShape(Capsule())
+                    }
+                    .padding(.top, 12)
                 }
+                .navigationBarBackButtonHidden(true)
             } else if let provider = provider {
                 provider.renderView()
                     // Distraction suppression: Disable default swipe-to-back
@@ -114,8 +128,48 @@ public struct ReaderContainerView: View {
                 
                 self.provider = newProvider
             } catch {
+                var newFailureType: BookFailureType = .corruptFile
+                
+                if let contentError = error as? ContentProviderError {
+                    switch contentError {
+                    case .fileNotFound: newFailureType = .missingFile
+                    case .unsupportedFormat: newFailureType = .unsupportedFormat
+                    }
+                } else if let epubError = error as? EPUBParserError {
+                    switch epubError {
+                    case .missingContainer, .missingOPF: newFailureType = .unreadableMetadata
+                    case .parsingFailed, .invalidArchive: newFailureType = .partialParse
+                    }
+                }
+                
+                if book.failureType != newFailureType {
+                    book.failureType = newFailureType
+                    try? book.modelContext?.save()
+                }
                 self.error = error
             }
+        }
+    }
+    
+    private func failureTitle(for type: BookFailureType) -> String {
+        switch type {
+        case .none: return "Unknown Error"
+        case .missingFile: return "File Missing"
+        case .corruptFile: return "Corrupted File"
+        case .unsupportedFormat: return "Unsupported Format"
+        case .unreadableMetadata: return "Unreadable Metadata"
+        case .partialParse: return "Incomplete File"
+        }
+    }
+    
+    private func failureMessage(for type: BookFailureType) -> String {
+        switch type {
+        case .none: return "An unknown error occurred while loading this book."
+        case .missingFile: return "The physical file for this book has been moved or deleted from your device."
+        case .corruptFile: return "This file appears to be corrupted and cannot be safely opened."
+        case .unsupportedFormat: return "This document format is not supported by the reader."
+        case .unreadableMetadata: return "The structural metadata for this book is missing or unreadable."
+        case .partialParse: return "The book could only be partially parsed. Its contents might be malformed."
         }
     }
 }

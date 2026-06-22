@@ -1,53 +1,50 @@
 import SwiftUI
 
-public class EPUBProvider: ContentProvider {
-    public let book: Book
-    public let fileURL: URL
+@MainActor
+class EPUBProvider: ContentProvider {
+    let book: Book
+    let fileURL: URL
     
     private var parser: EPUBParser?
     private var _totalUnits: Int = 1
     private var _currentUnit: Int = 0
     
-    public required init(book: Book, fileURL: URL) {
+    required init(book: Book, fileURL: URL) {
         self.book = book
         self.fileURL = fileURL
     }
     
-    public var totalUnits: Int {
+    var totalUnits: Int {
         _totalUnits
     }
     
-    public var capabilities: ReaderCapabilities {
+    var capabilities: ReaderCapabilities {
         ReaderCapabilities(canChangeTypography: true, canChangeTheme: true)
     }
     
-    public var currentUnit: Int {
+    var currentUnit: Int {
         _currentUnit
     }
     
-    public func go(to unitIndex: Int) {
+    func go(to unitIndex: Int) {
         _currentUnit = unitIndex
         NotificationCenter.default.post(name: .init("ProviderNavigateToUnit"), object: nil, userInfo: ["unitIndex": unitIndex, "bookId": book.id])
     }
     
-    public func advance(forward: Bool) {
+    func advance(forward: Bool) {
         let newIndex = _currentUnit + (forward ? 1 : -1)
         if newIndex >= 0 && newIndex < _totalUnits {
             go(to: newIndex)
         }
     }
     
-    public func load() async throws {
+    func load() async throws {
         let parsed = try await EPUBParser(fileURL: fileURL)
         self.parser = parsed
-        
-        await MainActor.run {
-            self._totalUnits = max(1, parsed.spineItems.count)
-        }
+        self._totalUnits = max(1, parsed.spineItems.count)
     }
     
-    @MainActor
-    public func renderView() -> AnyView {
+    func renderView() -> AnyView {
         guard let parser = parser else {
             return AnyView(Text("EPUB not loaded").foregroundColor(.red))
         }

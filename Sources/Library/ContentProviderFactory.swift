@@ -1,12 +1,13 @@
 import Foundation
 
-public enum ContentProviderError: Error {
+enum ContentProviderError: Error {
     case unsupportedFormat(String)
     case fileNotFound
 }
 
-public struct ContentProviderFactory {
-    public static func provider(for book: Book) throws -> ContentProvider {
+struct ContentProviderFactory {
+    @MainActor
+    static func provider(for book: Book) throws -> ContentProvider {
         guard let url = LibraryStore.getURL(for: book) else {
             throw ContentProviderError.fileNotFound
         }

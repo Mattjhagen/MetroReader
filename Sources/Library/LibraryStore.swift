@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import CryptoKit
 
 @MainActor
 class LibraryStore {
@@ -34,17 +35,27 @@ class LibraryStore {
             try fileManager.copyItem(at: url, to: destinationURL)
         }
         
+        // Calculate simple hash
+        let hash = Self.computeHash(for: destinationURL)
+        
         // Create the Book record
         let book = Book(
             title: url.deletingPathExtension().lastPathComponent,
             author: "Unknown",
-            filename: filename
+            filename: filename,
+            contentHash: hash
         )
         
         modelContext.insert(book)
         try modelContext.save()
         
         return book
+    }
+    
+    static func computeHash(for url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let digest = SHA256.hash(data: data)
+        return digest.compactMap { String(format: "%02x", $0) }.joined()
     }
     
     static func getURL(for book: Book) -> URL? {
@@ -69,5 +80,48 @@ class LibraryStore {
         // 2. Remove from SwiftData
         modelContext.delete(book)
         try modelContext.save()
+    }
+    
+    func reconcileLibrary(books: [Book]) {
+        var hashesSeen: [String: Book] = [:]
+        
+        for book in books {
+            // 1. Validation: Does the physical file exist?
+            let fileExists = (Self.getURL(for: book) != nil)
+            if !fileExists {
+                if book.failureType == .none {
+                    book.failureType = .missingFile
+                }
+                continue
+            }
+            
+            // 2. Identity Hashing: Ensure hash exists
+            if book.contentHash == nil, let url = Self.getURL(for: book) {
+                book.contentHash = Self.computeHash(for: url)
+            }
+            
+            // 3. Deduplication
+            if let hash = book.contentHash {
+                if let existing = hashesSeen[hash] {
+                    // Duplicate found. Keep the one with the most progress, or the oldest.
+                    let keepExisting = existing.readingPosition > book.readingPosition || (existing.readingPosition == book.readingPosition && existing.dateAdded <= book.dateAdded)
+                    
+                    if keepExisting {
+                        modelContext.delete(book)
+                    } else {
+                        hashesSeen[hash] = book
+                        modelContext.delete(existing)
+                    }
+                } else {
+                    hashesSeen[hash] = book
+                }
+            }
+            
+            // 4. Normalization
+            if book.readingPosition < 0.0 { book.readingPosition = 0.0 }
+            if book.readingPosition > 1.0 { book.readingPosition = 1.0 }
+        }
+        
+        try? modelContext.save()
     }
 }
