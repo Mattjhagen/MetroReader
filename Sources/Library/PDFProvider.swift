@@ -16,6 +16,6 @@ public class PDFProvider: ContentProvider {
     
     @MainActor
     public func renderView() -> AnyView {
-        AnyView(PDFReaderView(url: fileURL))
+        AnyView(PDFReaderView(book: book, url: fileURL))
     }
 }

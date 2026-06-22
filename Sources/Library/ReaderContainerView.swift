@@ -5,6 +5,9 @@ public struct ReaderContainerView: View {
     @State private var provider: ContentProvider?
     @State private var error: Error?
     
+    // Immersive focus mode state
+    @State private var isImmersiveMode = false
+    
     public init(book: Book) {
         self.book = book
     }
@@ -24,6 +27,19 @@ public struct ReaderContainerView: View {
                 }
             } else if let provider = provider {
                 provider.renderView()
+                    // Use simultaneousGesture to catch taps without breaking PDFKit's internal gestures
+                    .simultaneousGesture(TapGesture().onEnded {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isImmersiveMode.toggle()
+                        }
+                    })
+                    // Toggle the Navigation Bar
+                    #if os(iOS)
+                    .toolbar(isImmersiveMode ? .hidden : .visible, for: .navigationBar)
+                    .toolbar(isImmersiveMode ? .hidden : .visible, for: .tabBar)
+                    // Optionally hide the home indicator and status bar
+                    .persistentSystemOverlays(isImmersiveMode ? .hidden : .visible)
+                    #endif
             } else {
                 ProgressView("Loading...")
             }
