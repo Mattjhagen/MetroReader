@@ -5,6 +5,8 @@ public class EPUBProvider: ContentProvider {
     public let fileURL: URL
     
     private var parser: EPUBParser?
+    private var _totalUnits: Int = 1
+    private var _currentUnit: Int = 0
     
     public required init(book: Book, fileURL: URL) {
         self.book = book
@@ -12,7 +14,7 @@ public class EPUBProvider: ContentProvider {
     }
     
     public var totalUnits: Int {
-        book.totalPages ?? 0
+        _totalUnits
     }
     
     public var capabilities: ReaderCapabilities {
@@ -20,24 +22,27 @@ public class EPUBProvider: ContentProvider {
     }
     
     public var currentUnit: Int {
-        book.lastPage ?? 0
+        _currentUnit
     }
     
     public func go(to unitIndex: Int) {
-        book.lastPage = unitIndex
+        _currentUnit = unitIndex
         NotificationCenter.default.post(name: .init("ProviderNavigateToUnit"), object: nil, userInfo: ["unitIndex": unitIndex, "bookId": book.id])
+    }
+    
+    public func advance(forward: Bool) {
+        let newIndex = _currentUnit + (forward ? 1 : -1)
+        if newIndex >= 0 && newIndex < _totalUnits {
+            go(to: newIndex)
+        }
     }
     
     public func load() async throws {
         let parsed = try await EPUBParser(fileURL: fileURL)
         self.parser = parsed
         
-        // Capture total units (spine items)
-        if book.totalPages == nil || book.totalPages != parsed.spineItems.count {
-            await MainActor.run {
-                book.totalPages = parsed.spineItems.count
-                try? book.modelContext?.save()
-            }
+        await MainActor.run {
+            self._totalUnits = max(1, parsed.spineItems.count)
         }
     }
     
@@ -60,8 +65,6 @@ struct EPUBReaderView: View {
     let book: Book
     let spineItems: [URL]
     
-    @State private var currentIndex: Int
-    
     @AppStorage("readerTheme") var theme: ReaderTheme = .system
     @AppStorage("readerFontSize") var fontSize: ReaderFontSize = .medium
     @AppStorage("readerMargin") var margin: ReaderMargin = .comfortable
@@ -69,53 +72,11 @@ struct EPUBReaderView: View {
     init(book: Book, spineItems: [URL]) {
         self.book = book
         self.spineItems = spineItems
-        self._currentIndex = State(initialValue: book.lastPage ?? 0)
     }
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            EPUBWebView(book: book, spineItems: spineItems, theme: theme, fontSize: fontSize, margin: margin)
-                .ignoresSafeArea(edges: .bottom)
-            
-            HStack {
-                Button(action: { navigate(by: -1) }) {
-                    Image(systemName: "chevron.left")
-                        .padding()
-                        .background(Material.ultraThinMaterial)
-                        .clipShape(Circle())
-                }
-                .disabled(currentIndex <= 0)
-                
-                Spacer()
-                
-                Text("Chapter \(currentIndex + 1) of \(spineItems.count)")
-                    .font(.caption)
-                    .padding(8)
-                    .background(Material.ultraThinMaterial)
-                    .cornerRadius(8)
-                
-                Spacer()
-                
-                Button(action: { navigate(by: 1) }) {
-                    Image(systemName: "chevron.right")
-                        .padding()
-                        .background(Material.ultraThinMaterial)
-                        .clipShape(Circle())
-                }
-                .disabled(currentIndex >= spineItems.count - 1)
-            }
-            .padding()
-        }
-    }
-    
-    private func navigate(by offset: Int) {
-        let newIndex = currentIndex + offset
-        if newIndex >= 0 && newIndex < spineItems.count {
-            currentIndex = newIndex
-            book.lastPage = currentIndex
-            try? book.modelContext?.save()
-            NotificationCenter.default.post(name: .init("ProviderNavigateToUnit"), object: nil, userInfo: ["unitIndex": currentIndex, "bookId": book.id])
-        }
+        EPUBWebView(book: book, spineItems: spineItems, theme: theme, fontSize: fontSize, margin: margin)
+            .ignoresSafeArea(edges: .bottom)
     }
 }
 
@@ -144,12 +105,6 @@ struct EPUBWebView: UIViewRepresentable {
                   let webView = webView else { return }
             
             webView.loadFileURL(spineItems[unitIndex], allowingReadAccessTo: spineItems[unitIndex].deletingLastPathComponent())
-        }
-        
-        // Load initial
-        let initialUnit = book.lastPage ?? 0
-        if initialUnit >= 0 && initialUnit < spineItems.count {
-            webView.loadFileURL(spineItems[initialUnit], allowingReadAccessTo: spineItems[initialUnit].deletingLastPathComponent())
         }
         
         return webView

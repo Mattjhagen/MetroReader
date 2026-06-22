@@ -31,6 +31,9 @@ public protocol ContentProvider {
     /// Command the provider to navigate to a specific unit
     func go(to unitIndex: Int)
     
+    /// Advance to the next or previous logical unit
+    func advance(forward: Bool)
+    
     /// Returns the SwiftUI View that renders this specific format.
     @MainActor func renderView() -> AnyView 
 }

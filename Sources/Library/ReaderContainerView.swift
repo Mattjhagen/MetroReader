@@ -46,9 +46,9 @@ public struct ReaderContainerView: View {
                         let width = UIScreen.main.bounds.width
                         
                         if x < width * 0.3 {
-                            provider.go(to: provider.currentUnit - 1)
+                            provider.advance(forward: false)
                         } else if x > width * 0.7 {
-                            provider.go(to: provider.currentUnit + 1)
+                            provider.advance(forward: true)
                         } else {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 isImmersiveMode.toggle()
@@ -87,10 +87,31 @@ public struct ReaderContainerView: View {
                 ProgressView("Loading...")
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .init("ProviderNavigateToUnit"))) { notification in
+            guard let userInfo = notification.userInfo,
+                  let bookId = userInfo["bookId"] as? UUID,
+                  bookId == book.id,
+                  let unitIndex = userInfo["unitIndex"] as? Int,
+                  let provider = provider else { return }
+            
+            // Normalize to 0.0 - 1.0
+            let total = Double(max(1, provider.totalUnits))
+            let position = Double(unitIndex) / total
+            
+            if book.readingPosition != position {
+                book.readingPosition = position
+                try? book.modelContext?.save()
+            }
+        }
         .task {
             do {
                 let newProvider = try ContentProviderFactory.provider(for: book)
                 try await newProvider.load()
+                
+                // Map global readingPosition -> internal format unit
+                let initialUnit = Int(book.readingPosition * Double(newProvider.totalUnits))
+                newProvider.go(to: initialUnit)
+                
                 self.provider = newProvider
             } catch {
                 self.error = error

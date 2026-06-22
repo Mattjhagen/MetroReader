@@ -10,28 +10,42 @@ public class PDFProvider: ContentProvider {
     }
     
     public var totalUnits: Int {
-        book.totalPages ?? 0
+        // We will post notification or just rely on PDFKit internally 
+        // For ContentProvider, we might need a reference to the PDFDocument.
+        // Actually, since ReaderContainerView handles normalization, we need totalUnits.
+        // We can store a reference to totalUnits once loaded.
+        return _totalUnits
     }
+    
+    private var _totalUnits: Int = 1
+    private var _currentUnit: Int = 0
     
     public var capabilities: ReaderCapabilities {
         ReaderCapabilities(canChangeTypography: false, canChangeTheme: false)
     }
     
     public var currentUnit: Int {
-        book.lastPage ?? 0
+        return _currentUnit
     }
     
     public func go(to unitIndex: Int) {
-        // We can communicate with PDFReaderView via Notification for now, 
-        // or let the View observe book.lastPage directly.
-        // For phase 1, we just update the book model and let the view react if we wire it up.
-        book.lastPage = unitIndex
+        _currentUnit = unitIndex
         NotificationCenter.default.post(name: .init("ProviderNavigateToUnit"), object: nil, userInfo: ["unitIndex": unitIndex, "bookId": book.id])
     }
     
+    public func advance(forward: Bool) {
+        let newIndex = _currentUnit + (forward ? 1 : -1)
+        if newIndex >= 0 && newIndex < _totalUnits {
+            go(to: newIndex)
+        }
+    }
+    
     public func load() async throws {
-        // PDFKit handles loading internally when the view is created, 
-        // but we could perform pre-flight checks here if needed.
+        if let doc = PDFDocument(url: fileURL) {
+            await MainActor.run {
+                self._totalUnits = max(1, doc.pageCount)
+            }
+        }
     }
     
     @MainActor
