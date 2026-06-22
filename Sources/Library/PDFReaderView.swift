@@ -45,12 +45,18 @@ struct PDFKitRepresentedView: UIViewRepresentable {
                 }
             }
         }
-        
         NotificationCenter.default.addObserver(
             context.coordinator,
             selector: #selector(Coordinator.pageChanged(_:)),
             name: .PDFViewPageChanged,
             object: pdfView
+        )
+        
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.programmaticNavigation(_:)),
+            name: .init("ProviderNavigateToUnit"),
+            object: nil
         )
         
         return pdfView
@@ -87,8 +93,22 @@ struct PDFKitRepresentedView: UIViewRepresentable {
             }
         }
         
+        @objc func programmaticNavigation(_ notification: Notification) {
+            guard let userInfo = notification.userInfo,
+                  let bookId = userInfo["bookId"] as? UUID,
+                  bookId == book.id,
+                  let unitIndex = userInfo["unitIndex"] as? Int,
+                  let pdfView = notification.object as? PDFView ?? NSApp.keyWindow?.firstResponder as? PDFView ?? nil,
+                  let document = pdfView.document else { return }
+            
+            if let page = document.page(at: unitIndex) {
+                pdfView.go(to: page)
+            }
+        }
+        
         deinit {
             saveTask?.cancel()
+            NotificationCenter.default.removeObserver(self)
         }
     }
 }
@@ -163,8 +183,22 @@ struct PDFKitRepresentedView: NSViewRepresentable {
             }
         }
         
+        @objc func programmaticNavigation(_ notification: Notification) {
+            guard let userInfo = notification.userInfo,
+                  let bookId = userInfo["bookId"] as? UUID,
+                  bookId == book.id,
+                  let unitIndex = userInfo["unitIndex"] as? Int,
+                  let pdfView = notification.object as? PDFView ?? NSApp.keyWindow?.firstResponder as? PDFView ?? nil,
+                  let document = pdfView.document else { return }
+            
+            if let page = document.page(at: unitIndex) {
+                pdfView.go(to: page)
+            }
+        }
+        
         deinit {
             saveTask?.cancel()
+            NotificationCenter.default.removeObserver(self)
         }
     }
 }
