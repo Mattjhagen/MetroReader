@@ -7,7 +7,7 @@ struct LibraryView: View {
     
     @State private var isImporting = false
     @State private var libraryStore: LibraryStore?
-    @State private var selectedBookURL: URL?
+    @State private var selectedBook: Book?
 
     let columns = [
         GridItem(.adaptive(minimum: 160, maximum: 200), spacing: MetroTheme.spacing)
@@ -57,8 +57,8 @@ struct LibraryView: View {
                     }
                 }
             }
-            .navigationDestination(item: $selectedBookURL) { url in
-                PDFReaderView(url: url)
+            .navigationDestination(item: $selectedBook) { book in
+                ReaderContainerView(book: book)
             }
             .fileImporter(
                 isPresented: $isImporting,
@@ -85,8 +85,8 @@ struct LibraryView: View {
             size: .medium,
             backgroundColor: MetroTheme.Colors.color(for: book.id.uuidString),
             action: {
-                if let url = LibraryStore.getURL(for: book) {
-                    selectedBookURL = url
+                if LibraryStore.getURL(for: book) != nil {
+                    selectedBook = book
                     book.lastOpenedAt = .now
                     try? modelContext.save()
                 }
