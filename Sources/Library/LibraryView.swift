@@ -3,40 +3,47 @@ import SwiftData
 
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Book.dateAdded, order: .reverse) private var books: [Book]
+    @Query(sort: \Book.dateAdded, order: .reverse) private var allBooks: [Book]
     
     @State private var isImporting = false
     @State private var libraryStore: LibraryStore?
     @State private var selectedBookURL: URL?
 
-    // Using grid columns that match our base unit structure
     let columns = [
         GridItem(.adaptive(minimum: 160, maximum: 200), spacing: MetroTheme.spacing)
     ]
+    
+    var recentlyOpened: [Book] {
+        allBooks
+            .filter { $0.lastOpenedAt != nil }
+            .sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }
+    }
+    
+    var libraryBooks: [Book] {
+        allBooks.filter { $0.lastOpenedAt == nil }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: MetroTheme.spacing) {
-                    ForEach(books) { book in
-                        // We use the new MetroTile which encapsulates the layout and animation
-                        MetroTile(
-                            size: .medium,
-                            backgroundColor: MetroTheme.Colors.color(for: book.id.uuidString),
-                            action: {
-                                if let url = LibraryStore.getURL(for: book) {
-                                    selectedBookURL = url
-                                    
-                                    // Update last opened time
-                                    book.lastOpenedAt = .now
-                                    try? modelContext.save()
-                                }
+                VStack(alignment: .leading, spacing: MetroTheme.spacing * 2) {
+                    
+                    if !recentlyOpened.isEmpty {
+                        SectionHeader(title: "Recently Opened")
+                        LazyVGrid(columns: columns, spacing: MetroTheme.spacing) {
+                            ForEach(recentlyOpened) { book in
+                                bookTile(for: book)
                             }
-                        ) {
-                            BookTileContent(book: book)
                         }
-                        // Handle missing files gracefully
-                        .opacity(LibraryStore.getURL(for: book) == nil ? 0.5 : 1.0)
+                    }
+                    
+                    if !libraryBooks.isEmpty {
+                        SectionHeader(title: "Library")
+                        LazyVGrid(columns: columns, spacing: MetroTheme.spacing) {
+                            ForEach(libraryBooks) { book in
+                                bookTile(for: book)
+                            }
+                        }
                     }
                 }
                 .padding(MetroTheme.spacing)
@@ -50,7 +57,6 @@ struct LibraryView: View {
                     }
                 }
             }
-            // Navigation destination for reading
             .navigationDestination(item: $selectedBookURL) { url in
                 PDFReaderView(url: url)
             }
@@ -72,6 +78,33 @@ struct LibraryView: View {
             }
         }
     }
+    
+    @ViewBuilder
+    private func bookTile(for book: Book) -> some View {
+        MetroTile(
+            size: .medium,
+            backgroundColor: MetroTheme.Colors.color(for: book.id.uuidString),
+            action: {
+                if let url = LibraryStore.getURL(for: book) {
+                    selectedBookURL = url
+                    book.lastOpenedAt = .now
+                    try? modelContext.save()
+                }
+            }
+        ) {
+            BookTileContent(book: book)
+        }
+        .contextMenu {
+            Button(role: .destructive) {
+                delete(book)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .opacity(calculateOpacity(for: book))
+        // Smooth out layout shifts when a book is deleted or moved
+        .animation(.spring(), value: allBooks)
+    }
 
     private func importBook(from url: URL) {
         do {
@@ -80,9 +113,43 @@ struct LibraryView: View {
             print("Failed to import book: \(error.localizedDescription)")
         }
     }
+    
+    private func delete(_ book: Book) {
+        withAnimation(.spring) {
+            try? libraryStore?.deleteBook(book)
+        }
+    }
+    
+    private func calculateOpacity(for book: Book) -> Double {
+        guard let url = LibraryStore.getURL(for: book) else {
+            return 0.5 // Missing file
+        }
+        
+        guard let lastOpened = book.lastOpenedAt else {
+            return 1.0 // Never opened, full opacity
+        }
+        
+        // Decay opacity based on days since last opened
+        let daysSinceOpen = Calendar.current.dateComponents([.day], from: lastOpened, to: .now).day ?? 0
+        if daysSinceOpen > 30 {
+            return 0.6
+        } else if daysSinceOpen > 7 {
+            return 0.8
+        }
+        return 1.0
+    }
 }
 
-/// The actual data presentation for a book inside a tile.
+struct SectionHeader: View {
+    let title: String
+    var body: some View {
+        Text(title)
+            .font(.title2)
+            .fontWeight(.semibold)
+            .padding(.top, MetroTheme.spacing)
+    }
+}
+
 struct BookTileContent: View {
     let book: Book
     

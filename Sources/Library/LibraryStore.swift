@@ -59,4 +59,15 @@ class LibraryStore {
             return nil
         }
     }
+    
+    func deleteBook(_ book: Book) throws {
+        // 1. Remove the physical file
+        if let url = Self.getURL(for: book) {
+            try FileManager.default.removeItem(at: url)
+        }
+        
+        // 2. Remove from SwiftData
+        modelContext.delete(book)
+        try modelContext.save()
+    }
 }
