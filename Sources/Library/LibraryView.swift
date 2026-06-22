@@ -16,6 +16,7 @@ struct LibraryView: View {
     @State private var libraryStore: LibraryStore?
     @State private var selectedBook: Book?
     @State private var searchText = ""
+    @State private var hasAutoResumed = false
     @AppStorage("librarySortMode") private var sortMode: SortMode = .recent
 
     let columns = [
@@ -133,6 +134,21 @@ struct LibraryView: View {
             }
             .onAppear {
                 libraryStore = LibraryStore(modelContext: modelContext)
+                
+                // Auto-resume logic
+                if !hasAutoResumed {
+                    hasAutoResumed = true
+                    // Find the single most eligible book for auto-resume
+                    if let resumeBook = allBooks.filter({ $0.shouldAutoResume })
+                        .sorted(by: { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) })
+                        .first {
+                        
+                        // We use a slight delay so the UI doesn't jump aggressively before the view hierarchy settles
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            open(resumeBook)
+                        }
+                    }
+                }
             }
         }
     }
@@ -157,6 +173,11 @@ struct LibraryView: View {
         .contextMenu {
             Button(role: .destructive) { delete(book) } label: { Label("Delete", systemImage: "trash") }
         }
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.accentColor.opacity(0.8), lineWidth: 2)
+        )
+        .shadow(color: Color.accentColor.opacity(0.2), radius: 10, x: 0, y: 5)
         .animation(.spring(), value: allBooks)
     }
     

@@ -25,6 +25,13 @@ final class Book {
         return readingProgress >= 0.95
     }
     
+    var shouldAutoResume: Bool {
+        guard let lastOpened = lastOpenedAt else { return false }
+        let hoursSinceOpen = Calendar.current.dateComponents([.hour], from: lastOpened, to: .now).hour ?? 0
+        
+        return hoursSinceOpen <= 72 && readingProgress > 0 && !isCompleted
+    }
+    
     init(id: UUID = UUID(), title: String, author: String, filename: String, dateAdded: Date = .now, lastOpenedAt: Date? = nil, lastPage: Int? = nil, isFavorite: Bool = false, totalPages: Int? = nil) {
         self.id = id
         self.title = title
