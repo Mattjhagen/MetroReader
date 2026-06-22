@@ -7,29 +7,39 @@ struct LibraryView: View {
     
     @State private var isImporting = false
     @State private var libraryStore: LibraryStore?
+    @State private var selectedBookURL: URL?
 
+    // Using grid columns that match our base unit structure
     let columns = [
-        GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
+        GridItem(.adaptive(minimum: 160, maximum: 200), spacing: MetroTheme.spacing)
     ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 16) {
+                LazyVGrid(columns: columns, spacing: MetroTheme.spacing) {
                     ForEach(books) { book in
-                        if let fileURL = LibraryStore.getURL(for: book) {
-                            NavigationLink(destination: PDFReaderView(url: fileURL)) {
-                                BookTileView(book: book)
+                        // We use the new MetroTile which encapsulates the layout and animation
+                        MetroTile(
+                            size: .medium,
+                            backgroundColor: MetroTheme.Colors.color(for: book.id.uuidString),
+                            action: {
+                                if let url = LibraryStore.getURL(for: book) {
+                                    selectedBookURL = url
+                                    
+                                    // Update last opened time
+                                    book.lastOpenedAt = .now
+                                    try? modelContext.save()
+                                }
                             }
-                            .buttonStyle(.plain)
-                        } else {
-                            // File missing
-                            BookTileView(book: book)
-                                .opacity(0.5)
+                        ) {
+                            BookTileContent(book: book)
                         }
+                        // Handle missing files gracefully
+                        .opacity(LibraryStore.getURL(for: book) == nil ? 0.5 : 1.0)
                     }
                 }
-                .padding()
+                .padding(MetroTheme.spacing)
             }
             .navigationTitle("MetroReader")
             .toolbar {
@@ -39,6 +49,10 @@ struct LibraryView: View {
                             .font(.title3)
                     }
                 }
+            }
+            // Navigation destination for reading
+            .navigationDestination(item: $selectedBookURL) { url in
+                PDFReaderView(url: url)
             }
             .fileImporter(
                 isPresented: $isImporting,
@@ -68,11 +82,12 @@ struct LibraryView: View {
     }
 }
 
-struct BookTileView: View {
+/// The actual data presentation for a book inside a tile.
+struct BookTileContent: View {
     let book: Book
     
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 4) {
             Spacer()
             Text(book.title)
                 .font(.headline)
@@ -85,12 +100,7 @@ struct BookTileView: View {
                 .foregroundColor(.white.opacity(0.8))
                 .lineLimit(1)
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .aspectRatio(0.7, contentMode: .fit)
-        .background(Color.accentColor) // Metro tile aesthetic
-        .cornerRadius(12)
-        .shadow(radius: 4, y: 2)
     }
 }
 
