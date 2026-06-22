@@ -2,9 +2,19 @@ import Foundation
 import SwiftData
 import CryptoKit
 
+enum LibraryStatus: Equatable {
+    case idle
+    case checking
+    case repairing
+    case syncing
+    case complete
+}
+
 @MainActor
+@Observable
 class LibraryStore {
     let modelContext: ModelContext
+    var syncStatus: LibraryStatus = .idle
     
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -47,6 +57,10 @@ class LibraryStore {
         )
         
         modelContext.insert(book)
+        
+        let event = LibraryEvent(eventType: .imported, bookId: book.id)
+        modelContext.insert(event)
+        
         try modelContext.save()
         
         return book
@@ -78,11 +92,18 @@ class LibraryStore {
         }
         
         // 2. Remove from SwiftData
+        let bookId = book.id
         modelContext.delete(book)
+        
+        let event = LibraryEvent(eventType: .removed, bookId: bookId)
+        modelContext.insert(event)
+        
         try modelContext.save()
     }
     
     func reconcileLibrary(books: [Book]) {
+        self.syncStatus = .checking
+        var didWork = false
         var hashesSeen: [String: Book] = [:]
         
         for book in books {
@@ -93,6 +114,12 @@ class LibraryStore {
                     book.failureType = .missingFile
                 }
                 continue
+            } else if book.failureType == .missingFile {
+                self.syncStatus = .repairing
+                book.failureType = .none
+                let event = LibraryEvent(eventType: .repaired, bookId: book.id)
+                modelContext.insert(event)
+                didWork = true
             }
             
             // 2. Identity Hashing: Ensure hash exists
@@ -108,9 +135,11 @@ class LibraryStore {
                     
                     if keepExisting {
                         modelContext.delete(book)
+                        didWork = true
                     } else {
                         hashesSeen[hash] = book
                         modelContext.delete(existing)
+                        didWork = true
                     }
                 } else {
                     hashesSeen[hash] = book
@@ -122,6 +151,54 @@ class LibraryStore {
             if book.readingPosition > 1.0 { book.readingPosition = 1.0 }
         }
         
+        // 5. Cross-Cluster Progress Sync (Conditional)
+        var clusterHighWatermarks: [String: Double] = [:]
+        
+        for book in books {
+            // Group by clusterId AND extension to ensure format compatibility
+            guard let url = Self.getURL(for: book) else { continue }
+            let ext = url.pathExtension.lowercased()
+            let syncKey = "\(book.clusterId)_\(ext)"
+            
+            let currentHigh = clusterHighWatermarks[syncKey] ?? 0.0
+            if book.readingPosition > currentHigh {
+                clusterHighWatermarks[syncKey] = book.readingPosition
+            }
+        }
+        
+        for book in books {
+            guard let url = Self.getURL(for: book) else { continue }
+            let ext = url.pathExtension.lowercased()
+            let syncKey = "\(book.clusterId)_\(ext)"
+            
+            if let high = clusterHighWatermarks[syncKey], book.readingPosition < high {
+                self.syncStatus = .syncing
+                book.readingPosition = high
+                didWork = true
+            }
+        }
+        
+        // 6. Prune old events
+        let thirtyDaysAgo = Date().addingTimeInterval(-30 * 24 * 60 * 60)
+        let descriptor = FetchDescriptor<LibraryEvent>()
+        if let events = try? modelContext.fetch(descriptor) {
+            for event in events {
+                if event.timestamp < thirtyDaysAgo {
+                    modelContext.delete(event)
+                }
+            }
+        }
+        
         try? modelContext.save()
+        
+        if didWork {
+            self.syncStatus = .complete
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                self.syncStatus = .idle
+            }
+        } else {
+            self.syncStatus = .idle
+        }
     }
 }

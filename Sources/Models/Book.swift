@@ -23,6 +23,7 @@ final class Book {
     var lastOpenedAt: Date?
     var readingPosition: Double // 0.0 to 1.0
     var lastKnownGoodPosition: Double // Safe continuity fallback
+    var clusterId: String // Human-level conceptual grouping
     
     var readingProgress: Double {
         return readingPosition
@@ -56,5 +57,12 @@ final class Book {
         self.isFavorite = isFavorite
         self.failureType = failureType
         self.contentHash = contentHash
+        self.clusterId = Self.generateClusterId(title: title, author: author)
+    }
+    
+    static func generateClusterId(title: String, author: String) -> String {
+        let combined = "\(title) \(author)"
+        let stripped = combined.components(separatedBy: .alphanumerics.inverted).joined()
+        return stripped.lowercased()
     }
 }

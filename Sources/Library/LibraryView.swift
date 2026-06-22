@@ -15,6 +15,7 @@ struct LibraryView: View {
     @State private var isImporting = false
     @State private var libraryStore: LibraryStore?
     @State private var selectedBook: Book?
+    @State private var detailedBook: Book?
     @State private var searchText = ""
     @State private var hasAutoResumed = false
     @AppStorage("librarySortMode") private var sortMode: SortMode = .recent
@@ -85,7 +86,17 @@ struct LibraryView: View {
                     }
                     
                     if !librarySectionBooks.isEmpty {
-                        SectionHeader(title: "Library")
+                        HStack(alignment: .lastTextBaseline) {
+                            SectionHeader(title: "Library")
+                            Spacer()
+                            if let status = libraryStore?.syncStatus, status != .idle && status != .complete {
+                                Text(statusString(for: status))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .transition(.opacity)
+                                    .animation(.easeInOut, value: status)
+                            }
+                        }
                         LazyVGrid(columns: columns, spacing: MetroTheme.spacing) {
                             ForEach(librarySectionBooks) { book in
                                 bookTile(for: book)
@@ -131,6 +142,9 @@ struct LibraryView: View {
             }
             .navigationDestination(item: $selectedBook) { book in
                 ReaderContainerView(book: book)
+            }
+            .sheet(item: $detailedBook) { book in
+                BookDetailsView(book: book, onDelete: { delete(book) })
             }
             .fileImporter(
                 isPresented: $isImporting,
@@ -192,8 +206,8 @@ struct LibraryView: View {
                     .foregroundColor(.white.opacity(0.3))
             }
         }
-        .contextMenu {
-            Button(role: .destructive) { delete(book) } label: { Label("Delete", systemImage: "trash") }
+        .onLongPressGesture {
+            detailedBook = book
         }
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -215,8 +229,8 @@ struct LibraryView: View {
         ) {
             BookTileContent(book: book, isActive: false)
         }
-        .contextMenu {
-            Button(role: .destructive) { delete(book) } label: { Label("Delete", systemImage: "trash") }
+        .onLongPressGesture {
+            detailedBook = book
         }
         .opacity(calculateOpacity(for: book))
         .animation(.spring(), value: allBooks)
@@ -408,6 +422,15 @@ struct LibraryView: View {
         case .missingFile: return .missing
         case .corruptFile, .unreadableMetadata, .unsupportedFormat: return .corrupted
         case .partialParse: return .incomplete
+        }
+    }
+    
+    private func statusString(for status: LibraryStatus) -> String {
+        switch status {
+        case .checking: return "Checking library..."
+        case .repairing: return "Repairing library..."
+        case .syncing: return "Updating reading progress..."
+        default: return ""
         }
     }
 }
