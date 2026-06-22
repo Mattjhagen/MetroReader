@@ -1,5 +1,15 @@
 import SwiftUI
 
+public struct ReaderCapabilities {
+    public let canChangeTypography: Bool
+    public let canChangeTheme: Bool
+    
+    public init(canChangeTypography: Bool, canChangeTheme: Bool) {
+        self.canChangeTypography = canChangeTypography
+        self.canChangeTheme = canChangeTheme
+    }
+}
+
 public protocol ContentProvider {
     var book: Book { get }
     var fileURL: URL { get }
@@ -11,6 +21,9 @@ public protocol ContentProvider {
     
     /// Total units of content (Pages for PDF, Spine items for EPUB)
     var totalUnits: Int { get }
+    
+    /// The capabilities supported by this provider's format
+    var capabilities: ReaderCapabilities { get }
     
     /// The current reading position, mapped to the unit index
     var currentUnit: Int { get }

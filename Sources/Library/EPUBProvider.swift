@@ -15,6 +15,10 @@ public class EPUBProvider: ContentProvider {
         book.totalPages ?? 0
     }
     
+    public var capabilities: ReaderCapabilities {
+        ReaderCapabilities(canChangeTypography: true, canChangeTheme: true)
+    }
+    
     public var currentUnit: Int {
         book.lastPage ?? 0
     }
@@ -58,6 +62,10 @@ struct EPUBReaderView: View {
     
     @State private var currentIndex: Int
     
+    @AppStorage("readerTheme") var theme: ReaderTheme = .system
+    @AppStorage("readerFontSize") var fontSize: ReaderFontSize = .medium
+    @AppStorage("readerMargin") var margin: ReaderMargin = .comfortable
+    
     init(book: Book, spineItems: [URL]) {
         self.book = book
         self.spineItems = spineItems
@@ -66,7 +74,7 @@ struct EPUBReaderView: View {
     
     var body: some View {
         ZStack(alignment: .bottom) {
-            EPUBWebView(book: book, spineItems: spineItems)
+            EPUBWebView(book: book, spineItems: spineItems, theme: theme, fontSize: fontSize, margin: margin)
                 .ignoresSafeArea(edges: .bottom)
             
             HStack {
@@ -115,6 +123,9 @@ struct EPUBReaderView: View {
 struct EPUBWebView: UIViewRepresentable {
     let book: Book
     let spineItems: [URL]
+    let theme: ReaderTheme
+    let fontSize: ReaderFontSize
+    let margin: ReaderMargin
     
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView()
@@ -144,6 +155,42 @@ struct EPUBWebView: UIViewRepresentable {
         return webView
     }
     
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        // Build CSS based on settings
+        var css = "body { "
+        
+        // Font Size
+        switch fontSize {
+        case .small: css += "font-size: 14px; "
+        case .medium: css += "font-size: 18px; "
+        case .large: css += "font-size: 24px; "
+        }
+        
+        // Margin
+        switch margin {
+        case .compact: css += "padding: 5%; line-height: 1.3; "
+        case .comfortable: css += "padding: 10%; line-height: 1.6; "
+        case .spacious: css += "padding: 15%; line-height: 2.0; "
+        }
+        
+        // Theme
+        switch theme {
+        case .dark:
+            css += "background-color: #000000; color: #FFFFFF; "
+        case .sepia:
+            css += "background-color: #F4ECD8; color: #5B4636; "
+        case .light:
+            css += "background-color: #FFFFFF; color: #000000; "
+        case .system:
+            // Handled by default or media query if we inject more complex CSS
+            break
+        }
+        
+        css += "}"
+        
+        let js = "var style = document.getElementById('metro-comfort-style'); if (!style) { style = document.createElement('style'); style.id = 'metro-comfort-style'; document.head.appendChild(style); } style.innerHTML = '\(css)';"
+        
+        uiView.evaluateJavaScript(js, completionHandler: nil)
+    }
 }
 #endif

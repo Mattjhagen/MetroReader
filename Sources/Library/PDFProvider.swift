@@ -13,6 +13,10 @@ public class PDFProvider: ContentProvider {
         book.totalPages ?? 0
     }
     
+    public var capabilities: ReaderCapabilities {
+        ReaderCapabilities(canChangeTypography: false, canChangeTheme: false)
+    }
+    
     public var currentUnit: Int {
         book.lastPage ?? 0
     }
